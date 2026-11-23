@@ -68,7 +68,9 @@ export default async (req) => {
     return json({ error: "unauthorized" }, 401);
   }
 
-  const store = getStore("grocery");
+  // Strong consistency: without it, a read right after a write can return the
+  // previous version for up to ~60 s (items would vanish then reappear on poll).
+  const store = getStore({ name: "grocery", consistency: "strong" });
   const state = (await store.get("state", { type: "json" })) ?? newState();
 
   if (req.method === "GET") return json(state);
