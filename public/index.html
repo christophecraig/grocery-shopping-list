@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f7d4f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Groceries">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="icon" href="/icons/icon-192.png">
+  <title>Grocery List</title>
+  <style>
+    :root {
+      --bg: #f6f7f4; --card: #fff; --text: #1d2a22; --muted: #6b7a70;
+      --accent: #2f7d4f; --accent-text: #fff; --line: #e2e6e0; --danger: #c0392b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #121714; --card: #1b221e; --text: #e8efe9; --muted: #8a998f; --line: #2a342e; --accent: #3a9962; }
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    main { max-width: 560px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 1.4rem; margin: 8px 0 4px; }
+    .sub { color: var(--muted); font-size: .9rem; margin-bottom: 12px; min-height: 1.3em; }
+    form.add { display: flex; gap: 8px; margin-bottom: 14px; }
+    input[type=text], input[type=password] {
+      flex: 1; min-width: 0; font: inherit; padding: 14px; border-radius: 12px;
+      border: 1px solid var(--line); background: var(--card); color: var(--text);
+    }
+    button { font: inherit; border: 0; border-radius: 12px; padding: 14px 18px; background: var(--accent); color: var(--accent-text); font-weight: 600; cursor: pointer; }
+    button.ghost { background: transparent; color: var(--muted); font-weight: 500; }
+    button:disabled { opacity: .5; }
+    ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    li { display: flex; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+    li .item { flex: 1; display: flex; align-items: center; gap: 12px; padding: 14px; background: none; color: inherit; text-align: left; font-weight: 400; border-radius: 12px; min-width: 0; }
+    li .box { flex: none; width: 24px; height: 24px; border-radius: 7px; border: 2px solid var(--muted); display: grid; place-items: center; font-size: 15px; line-height: 1; }
+    li .name { overflow-wrap: anywhere; }
+    li.done .name { text-decoration: line-through; color: var(--muted); }
+    li.done .box { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+    li .del { flex: none; background: none; color: var(--muted); padding: 14px 16px; font-size: 1.3rem; font-weight: 400; }
+    .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+    .actions { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+    h2 { font-size: 1rem; margin: 28px 0 8px; color: var(--muted); font-weight: 600; }
+    details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+    details summary { cursor: pointer; }
+    details ul { margin-top: 10px; gap: 4px; }
+    details li { border: 0; background: none; padding: 2px 0; }
+    .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #222; color: #fff; padding: 12px 16px; border-radius: 12px; display: none; align-items: center; gap: 12px; max-width: calc(100% - 32px); z-index: 10; }
+    .toast.show { display: flex; }
+    .toast button { background: none; color: #8fe0b0; padding: 0; }
+    #login { padding-top: 12vh; }
+    #login form { display: flex; flex-direction: column; gap: 10px; }
+    .err { color: var(--danger); min-height: 1.3em; font-size: .9rem; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <section id="login" hidden>
+    <h1>Grocery List</h1>
+    <p class="sub">Enter the shared password.</p>
+    <form id="loginForm">
+      <input type="password" id="pwd" placeholder="Password" autocomplete="current-password" required>
+      <button type="submit">Open</button>
+      <div class="err" id="loginErr"></div>
+    </form>
+  </section>
+
+  <section id="app" hidden>
+    <h1>Grocery List</h1>
+    <div class="sub" id="status"></div>
+
+    <form class="add" id="addForm" autocomplete="off">
+      <input type="text" id="newItem" list="suggestions" placeholder="Add an item…" maxlength="80" enterkeyhint="done" autocapitalize="sentences">
+      <datalist id="suggestions"></datalist>
+      <button type="submit">Add</button>
+    </form>
+
+    <ul id="list"></ul>
+    <div class="empty" id="empty" hidden>The list is empty.<br>Add what needs to be bought.</div>
+
+    <div class="actions">
+      <button id="finish" disabled>Shopping done — start a new list</button>
+    </div>
+
+    <div id="historyBox" hidden>
+      <h2>Previous lists</h2>
+      <div id="history"></div>
+    </div>
+
+    <div class="actions"><button class="ghost" id="logout">Sign out</button></div>
+  </section>
+</main>
+<div class="toast" id="toast"><span id="toastMsg"></span><button id="toastAction" hidden></button></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const KEY_PWD = "grocery.pwd", KEY_STATE = "grocery.state";
+  let pwd = localStorage.getItem(KEY_PWD) || "";
+  let state = null;
+  let inflight = 0;
+  let lastSync = null;
+  let online = true;
+
+  // ---------- network ----------
+  async function call(method, body) {
+    const res = await fetch("/api/state", {
+      method,
+      headers: { "x-password": pwd, ...(body ? { "content-type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    });
+    if (res.status === 401) { signOut("Wrong password."); throw new Error("unauthorized"); }
+    if (!res.ok) throw new Error("http " + res.status);
+    return res.json();
+  }
+
+  function setState(s) {
+    state = s;
+    lastSync = Date.now();
+    online = true;
+    try { localStorage.setItem(KEY_STATE, JSON.stringify(s)); } catch {}
+    render();
+  }
+
+  async function refresh() {
+    if (!pwd || inflight > 0 || document.hidden) return;
+    try { setState(await call("GET")); }
+    catch (e) { if (e.message !== "unauthorized") { online = false; render(); } }
+  }
+
+  async function act(body, optimistic) {
+    if (optimistic && state) { optimistic(state.current); render(); }
+    inflight++;
+    try {
+      setState(await call("POST", body));
+    } catch (e) {
+      if (e.message !== "unauthorized") {
+        online = false;
+        toast("No connection — change not saved.");
+        inflight--;
+        await refresh();
+        return;
+      }
+    }
+    inflight--;
+  }
+
+  // ---------- rendering ----------
+  function render() {
+    if (!state) return;
+    const { items } = state.current;
+    const sorted = [...items.filter((i) => !i.done), ...items.filter((i) => i.done)];
+    const list = $("list");
+    list.replaceChildren(...sorted.map((it) => {
+      const li = document.createElement("li");
+      if (it.done) li.className = "done";
+      const toggle = document.createElement("button");
+      toggle.className = "item";
+      toggle.innerHTML = '<span class="box"></span><span class="name"></span>';
+      toggle.querySelector(".box").textContent = it.done ? "✓" : "";
+      toggle.querySelector(".name").textContent = it.name;
+      toggle.onclick = () => act({ type: "toggle", id: it.id }, (c) => { const x = c.items.find((i) => i.id === it.id); if (x) x.done = !x.done; });
+      const del = document.createElement("button");
+      del.className = "del";
+      del.setAttribute("aria-label", "Remove " + it.name);
+      del.textContent = "×";
+      del.onclick = () => act({ type: "remove", id: it.id }, (c) => { c.items = c.items.filter((i) => i.id !== it.id); });
+      li.append(toggle, del);
+      return li;
+    }));
+    $("empty").hidden = items.length > 0;
+    $("finish").disabled = items.length === 0;
+
+    const done = items.filter((i) => i.done).length;
+    const time = lastSync ? new Date(lastSync).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+    $("status").textContent = (items.length ? `${done}/${items.length} in the basket · ` : "") +
+      (online ? (time ? "synced " + time : "") : "offline — read only");
+
+    // autocomplete from everything bought before
+    const names = new Set();
+    [state.current, ...state.history].forEach((l) => l.items.forEach((i) => names.add(i.name)));
+    $("suggestions").replaceChildren(...[...names].slice(0, 300).map((n) => { const o = document.createElement("option"); o.value = n; return o; }));
+
+    // history
+    $("historyBox").hidden = state.history.length === 0;
+    $("history").replaceChildren(...state.history.map((l) => {
+      const d = document.createElement("details");
+      const s = document.createElement("summary");
+      const got = l.items.filter((i) => i.done).length;
+      s.textContent = `${new Date(l.finishedAt).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })} — ${got}/${l.items.length} bought`;
+      const ul = document.createElement("ul");
+      l.items.forEach((i) => { const li = document.createElement("li"); li.className = i.done ? "done" : ""; li.innerHTML = '<span class="item"><span class="name"></span></span>'; li.querySelector(".name").textContent = (i.done ? "✓ " : "✗ ") + i.name; ul.append(li); });
+      d.append(s, ul);
+      return d;
+    }));
+  }
+
+  // ---------- UI wiring ----------
+  function showApp() { $("login").hidden = true; $("app").hidden = false; }
+  function signOut(msg) {
+    pwd = ""; state = null;
+    localStorage.removeItem(KEY_PWD); localStorage.removeItem(KEY_STATE);
+    $("app").hidden = true; $("login").hidden = false;
+    $("loginErr").textContent = msg || "";
+    $("pwd").value = "";
+  }
+
+  $("loginForm").onsubmit = async (e) => {
+    e.preventDefault();
+    pwd = $("pwd").value;
+    $("loginErr").textContent = "";
+    try {
+      setState(await call("GET"));
+      localStorage.setItem(KEY_PWD, pwd);
+      showApp();
+    } catch (err) {
+      if (err.message !== "unauthorized") $("loginErr").textContent = "Can't reach the server. Try again.";
+    }
+  };
+
+  $("addForm").onsubmit = (e) => {
+    e.preventDefault();
+    const name = $("newItem").value.trim();
+    if (!name) return;
+    $("newItem").value = "";
+    act({ type: "add", name }, (c) => {
+      if (!c.items.some((i) => !i.done && i.name.toLowerCase() === name.toLowerCase()))
+        c.items.push({ id: "tmp-" + Math.random(), name, done: false });
+    });
+    $("newItem").focus();
+  };
+
+  $("finish").onclick = async () => {
+    const left = state.current.items.filter((i) => !i.done).length;
+    const msg = left ? `${left} item(s) not checked yet. Finish this list anyway?` : "Finish this list and start a new one?";
+    if (!confirm(msg)) return;
+    await act({ type: "finish" });
+    toast("List archived.", "Undo", () => act({ type: "reopen" }));
+  };
+
+  $("logout").onclick = () => signOut("");
+
+  let toastTimer;
+  function toast(msg, actionLabel, onAction) {
+    $("toastMsg").textContent = msg;
+    const b = $("toastAction");
+    b.hidden = !actionLabel;
+    if (actionLabel) { b.textContent = actionLabel; b.onclick = () => { $("toast").classList.remove("show"); onAction(); }; }
+    $("toast").classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => $("toast").classList.remove("show"), 6000);
+  }
+
+  // ---------- boot ----------
+  if (pwd) {
+    try { state = JSON.parse(localStorage.getItem(KEY_STATE)); } catch {}
+    showApp();
+    render();
+    refresh();
+  } else {
+    $("login").hidden = false;
+  }
+  setInterval(refresh, 5000);
+  document.addEventListener("visibilitychange", refresh);
+  window.addEventListener("online", refresh);
+  window.addEventListener("offline", () => { online = false; render(); });
+
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+})();
+</script>
+</body>
+</html>
